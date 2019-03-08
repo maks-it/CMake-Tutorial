@@ -1,10 +1,12 @@
-[Step 1](https://cmake.org/cmake-tutorial/#s1) \|
-[Step 2](https://cmake.org/cmake-tutorial/#s2) \|
-[Step 3](https://cmake.org/cmake-tutorial/#s3) \|
-[Step 4](https://cmake.org/cmake-tutorial/#s4) \|
-[Step 5](https://cmake.org/cmake-tutorial/#s5) \|
-[Step 6](https://cmake.org/cmake-tutorial/#s6) \|
-[Step 7](https://cmake.org/cmake-tutorial/#s7)
+[Original Version](https://cmake.org/cmake-tutorial/) Of this tutorial
+
+[Step 1]() \|
+[Step 2]() \|
+[Step 3]() \|
+[Step 4]() \|
+[Step 5]() \|
+[Step 6]() \|
+[Step 7]()
 
 Below is a step-by-step tutorial covering common build system use cases
 that CMake helps to address. Many of these topics have been introduced
