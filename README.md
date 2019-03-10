@@ -62,8 +62,8 @@ code, doing it in the CMakeLists.txt file provides more flexibility. To
 add a version number we modify the CMakeLists.txt file as follows:
 
 ```cmake
-    cmake_minimum_required (VERSION 2.6)
-    project (Tutorial)
+    cmake_minimum_required(VERSION 3.8)
+    project(Tutorial)
     # The version number.
     set (Tutorial_VERSION_MAJOR 1)
     set (Tutorial_VERSION_MINOR 0)
@@ -74,13 +74,15 @@ add a version number we modify the CMakeLists.txt file as follows:
       "${PROJECT_SOURCE_DIR}/TutorialConfig.h.in"
       "${PROJECT_BINARY_DIR}/TutorialConfig.h"
       )
-     
+    
+	# add the executable
+    add_executable(Tutorial tutorial.cxx)
+
     # add the binary tree to the search path for include files
     # so that we will find TutorialConfig.h
-    include_directories("${PROJECT_BINARY_DIR}")
-     
-    # add the executable
-    add_executable(Tutorial tutorial.cxx)
+    target_include_directories(Tutorial PUBLIC
+                               "${PROJECT_BINARY_DIR}"
+                               )
 ```
 
 Since the configured file will be written into the binary tree we must
@@ -111,20 +113,19 @@ the version numbers. The resulting source code is listed below.
      
     int main (int argc, char *argv[])
     {
-      if (argc < 2)
+        if (argc < 2)
         {
-        fprintf(stdout,"%s Version %d.%d\n",
-                argv[0],
-                Tutorial_VERSION_MAJOR,
-                Tutorial_VERSION_MINOR);
-        fprintf(stdout,"Usage: %s number\n",argv[0]);
-        return 1;
+            std::cout << argv[0] << " Version " << Tutorial_VERSION_MAJOR << "." << Tutorial_VERSION_MAJOR << std::endl;
+            std::cout << "Usage: " << argv[0] << " number" << std::endl;
+            return 1;
         }
-      double inputValue = atof(argv[1]);
-      double outputValue = sqrt(inputValue);
-      fprintf(stdout,"The square root of %g is %g\n",
-              inputValue, outputValue);
-      return 0;
+
+        double inputValue = std::stod(argv[1]);
+        const double outputValue = sqrt(inputValue);
+
+        std::cout << "The square root of " << inputValue << " is " << outputValue << std::endl;
+
+        return 0;
     }
 ```
 
