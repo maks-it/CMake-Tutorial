@@ -33,22 +33,24 @@ source code for tutorial.cxx will compute the square root of a number
 and the first version of it is very simple, as follows:
 
 ```cxx
-    // A simple program that computes the square root of a number
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <math.h>
-    int main (int argc, char *argv[])
+// A simple program that computes the square root of a number
+#include <iostream>
+#include <sstream>
+#include <string>
+int main (int argc, char *argv[])
+{
+    if (argc < 2)
     {
-      if (argc < 2)
-        {
-        fprintf(stdout,"Usage: %s number\n",argv[0]);
-        return 1;
-        }
-      double inputValue = atof(argv[1]);
-      double outputValue = sqrt(inputValue);
-      fprintf(stdout,"The square root of %g is %g\n",
-              inputValue, outputValue);
-      return 0;
+	    std::cout << "Usage: " << argv[0] << " number" << std::endl;
+	    return 1;
+    }
+
+    double inputValue = std::stod(argv[1]);
+    const double outputValue = sqrt(inputValue);
+
+    std::cout << "The square root of " << inputValue << " is " << outputValue << std::endl;
+    
+	return 0;
     }
 ```
 
