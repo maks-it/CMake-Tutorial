@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.3)
 project(Tutorial)
 
 # control where the static and shared libraries are built so that on windows

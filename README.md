@@ -1,9 +1,5 @@
 Personnaly I found original tutoria outdated and uncomplete, after completing it before downloading original sources, with mediocrete results, I have decided to update it and consolidate in my repository.
 
-All files \*.cxx was renamed to \*.cpp, as I like, by the way my Visual Stutio likes it much more too. 
-
-If you want to take a pain, you can follow [Original Version](https://cmake.org/cmake-tutorial/) of this tutorial
-
 [Step 1]() \| [Step 2]() \| [Step 3]() \| [Step 4]() \| [Step 5]() \| [Step 6]() \| [Step 7]()
 
 Below is a step-by-step tutorial covering common build system use cases
@@ -96,7 +92,7 @@ following contents:
     #define Tutorial_VERSION_MINOR @Tutorial_VERSION_MINOR@
 ```
 
-Â 
+ 
 
 When CMake configures this header file the values for
 \@Tutorial\_VERSION\_MAJOR@ and \@Tutorial\_VERSION\_MINOR@ will be

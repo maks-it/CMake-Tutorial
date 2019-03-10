@@ -10,5 +10,5 @@
 #endif
 
 namespace mathfunctions {
-	double DECLSPEC sqrt(double x);
+double DECLSPEC sqrt(double x);
 }
