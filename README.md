@@ -38,7 +38,7 @@ file. Upper, lower, and mixed case commands are supported by CMake. The
 source code for tutorial.cxx will compute the square root of a number
 and the first version of it is very simple, as follows:
 
-```cpp
+```cxx
     // A simple program that computes the square root of a number
     #include <stdio.h>
     #include <stdlib.h>
@@ -106,7 +106,7 @@ replaced by the values from the CMakeLists.txt file. Next we modify
 tutorial.cxx to include the configured header file and to make use of
 the version numbers. The resulting source code is listed below.
 
-```cpp
+```cxx
     // A simple program that computes the square root of a number
     #include <stdio.h>
     #include <stdlib.h>
@@ -206,7 +206,7 @@ the executable. This is a common approach used to keep larger projects
 with many optional components clean. The corresponding changes to the
 source code are fairly straight forward and leave us with:
 
-```cpp
+```cxx
     // A simple program that computes the square root of a number
     #include <stdio.h>
     #include <stdlib.h>
@@ -365,7 +365,7 @@ CMake. Finally in the mysqrt function we can provide an alternate
 implementation based on log and exp if they are available on the system
 using the following code:
 
-```cpp
+```cxx
     // if we have both log and exp then use them
     #if defined (HAVE_LOG) && defined (HAVE_EXP)
       result = exp(log(x)*0.5);
@@ -383,7 +383,7 @@ and then compile that table into our application. To accomplish this we
 first need a program that will generate the table. In the MathFunctions
 subdirectory a new source file named MakeTable.cxx will do just that.
 
-```cpp
+```cxx
     // A simple program that builds a sqrt table 
     #include <stdio.h>
     #include <stdlib.h>
@@ -538,7 +538,7 @@ with all the features we have added looks like the following:
 
 TutorialConfig.h.in looks like:
 
-```cpp
+```cxx
     // the configured options and settings for Tutorial
     #define Tutorial_VERSION_MAJOR @Tutorial_VERSION_MAJOR@
     #define Tutorial_VERSION_MINOR @Tutorial_VERSION_MINOR@
