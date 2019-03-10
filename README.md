@@ -1,12 +1,10 @@
-[Original Version](https://cmake.org/cmake-tutorial/) Of this tutorial
+Personnaly I found original tutoria outdated and uncomplete, after completing it before downloading original sources, with mediocrete results, I have decided to update it and consolidate in my repository.
 
-[Step 1]() \|
-[Step 2]() \|
-[Step 3]() \|
-[Step 4]() \|
-[Step 5]() \|
-[Step 6]() \|
-[Step 7]()
+All files \*.cxx was renamed to \*.cpp, as I like, by the way my Visual Stutio likes it much more too. 
+
+If you want to take a pain, you can follow [Original Version](https://cmake.org/cmake-tutorial/) of this tutorial
+
+[Step 1]() \| [Step 2]() \| [Step 3]() \| [Step 4]() \| [Step 5]() \| [Step 6]() \| [Step 7]()
 
 Below is a step-by-step tutorial covering common build system use cases
 that CMake helps to address. Many of these topics have been introduced
