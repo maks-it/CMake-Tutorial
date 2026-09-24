@@ -1,68 +1,85 @@
+include(CheckSymbolExists)
+include(GenerateExportHeader)
 
-# add the library that runs
 add_library(MathFunctions MathFunctions.cxx)
+add_library(MathFunctions::MathFunctions ALIAS MathFunctions)
 
-# state that anybody linking to us needs to include the current source dir
-# to find MathFunctions.h, while we don't.
+generate_export_header(MathFunctions
+  BASE_NAME mathfunctions
+  EXPORT_FILE_NAME mathfunctions_export.h
+)
+
+target_sources(MathFunctions PUBLIC
+  FILE_SET HEADERS
+  BASE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+  FILES
+    MathFunctions.h
+    ${CMAKE_CURRENT_BINARY_DIR}/mathfunctions_export.h
+)
+
+target_compile_features(MathFunctions PUBLIC cxx_std_17)
 target_include_directories(MathFunctions
-                           INTERFACE
-                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-                            $<INSTALL_INTERFACE:include>
-                           )
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
-# should we use our own math functions
-option(USE_MYMATH "Use tutorial provided math implementation" ON)
+set_target_properties(MathFunctions PROPERTIES
+  VERSION ${PROJECT_VERSION}
+  SOVERSION ${PROJECT_VERSION_MAJOR}
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN YES
+)
+
+# Object code linked into MathFunctions. POSITION_INDEPENDENT_CODE lets the
+# same objects go inside a .so or a .dll. A plain STATIC archive would not
+# be absorbed when MathFunctions itself is static.
+add_library(AddLibrary OBJECT add.cxx)
+target_compile_features(AddLibrary PRIVATE cxx_std_17)
+set_target_properties(AddLibrary PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(MathFunctions PRIVATE AddLibrary)
+
 if(USE_MYMATH)
-
-  # does this system provide the log and exp functions?
-  include(CheckSymbolExists)
-  set(CMAKE_REQUIRED_LIBRARIES "m")
+  if(NOT WIN32)
+    set(CMAKE_REQUIRED_LIBRARIES m)
+  endif()
   check_symbol_exists(log "math.h" HAVE_LOG)
   check_symbol_exists(exp "math.h" HAVE_EXP)
 
-  # first we add the executable that generates the table
   add_executable(MakeTable MakeTable.cxx)
+  target_compile_features(MakeTable PRIVATE cxx_std_17)
 
-  # add the command to generate the source code
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/Table.h
     COMMAND MakeTable ${CMAKE_CURRENT_BINARY_DIR}/Table.h
     DEPENDS MakeTable
-    )
+  )
 
-  # library that just does sqrt
-  add_library(SqrtLibrary STATIC
-              mysqrt.cxx
-              ${CMAKE_CURRENT_BINARY_DIR}/Table.h
-              )
-
-  # state that we depend on our binary dir to find Table.h
-  target_include_directories(SqrtLibrary PRIVATE
-                             ${CMAKE_CURRENT_BINARY_DIR}
-                             )
-
-  set_target_properties(SqrtLibrary PROPERTIES
-                        POSITION_INDEPENDENT_CODE ${BUILD_SHARED_LIBS}
-                        )
-
+  add_library(SqrtLibrary OBJECT
+    mysqrt.cxx
+    ${CMAKE_CURRENT_BINARY_DIR}/Table.h
+  )
+  target_compile_features(SqrtLibrary PRIVATE cxx_std_17)
+  target_include_directories(SqrtLibrary PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+  set_target_properties(SqrtLibrary PROPERTIES POSITION_INDEPENDENT_CODE ON)
   target_compile_definitions(SqrtLibrary PRIVATE
-                             "$<$<BOOL:${HAVE_LOG}>:HAVE_LOG>"
-                             "$<$<BOOL:${HAVE_EXP}>:HAVE_EXP>"
-                             )
+    "$<$<BOOL:${HAVE_LOG}>:HAVE_LOG>"
+    "$<$<BOOL:${HAVE_EXP}>:HAVE_EXP>"
+  )
   target_link_libraries(MathFunctions PRIVATE SqrtLibrary)
 endif()
 
-target_compile_definitions(MathFunctions PRIVATE "$<$<BOOL:${USE_MYMATH}>:USE_MYMATH>")
-
-# define the symbol stating we are using the declspec(dllexport) when
-# building on windows
-target_compile_definitions(MathFunctions PRIVATE "EXPORTING_MYMATH")
-
-# setup the version numbering
-set_property(TARGET MathFunctions PROPERTY VERSION "1.0.0")
-set_property(TARGET MathFunctions PROPERTY SOVERSION "1")
+target_compile_definitions(MathFunctions PRIVATE
+  "$<$<BOOL:${USE_MYMATH}>:USE_MYMATH>"
+)
 
 install(TARGETS MathFunctions
-        DESTINATION lib
-        EXPORT MathFunctionsTargets)
-install(FILES MathFunctions.h DESTINATION include)
+  EXPORT MathFunctionsTargets
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  FILE_SET HEADERS DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)

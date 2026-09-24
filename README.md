@@ -1,643 +1,393 @@
-Personnaly I found original tutoria outdated and uncomplete, after completing it before downloading original sources, with mediocrete results, I have decided to update it and consolidate in my repository.
+# CMake tutorial fork
 
-[Step 1]() \| [Step 2]() \| [Step 3]() \| [Step 4]() \| [Step 5]() \| [Step 6]() \| [Step 7]()
+A fork of the [CMake tutorial](https://cmake.org/cmake/help/latest/guide/tutorial/index.html), updated to match the code in this repository. `MathFunctions` is a shared library (`.so` on Linux, `.dll` on Windows). Addition and square root are object libraries linked into that library.
 
-Below is a step-by-step tutorial covering common build system use cases
-that CMake helps to address. Many of these topics have been introduced
-in [*Mastering
-CMake*](http://www.kitware.com/products/books/CMakeBook.html) as
-separate issues but seeing how they all work together in an example
-project can be very helpful. This tutorial can be found in the
-[Tests/Tutorial](https://gitlab.kitware.com/cmake/cmake/tree/master/Tests/Tutorial)
-directory of the CMake source code tree. Each step has its own
-subdirectory containing a complete copy of the tutorial for that step.
+The project is already complete. The steps below explain how it is put together, in the same order as the original tutorial. Every snippet is the code in this repo.
 
-See also the introductory sections of the
-[cmake-buildsystem(7)](https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html#introduction)
-and
-[cmake-language(7)](https://cmake.org/cmake/help/latest/manual/cmake-language.7.html#organization)
-manual pages for an overview of CMake concepts and source tree
-organization.
+## Requirements
 
-A Basic Starting Point (Step1)
-------------------------------
+Two programs, both on `PATH`:
 
-The most basic project is an executable built from source code files.
-For simple projects a two line CMakeLists.txt file is all that is
-required. This will be the starting point for our tutorial. The
-CMakeLists.txt file looks like:
+| | Version | What it is for |
+|---|---|---|
+| CMake | 3.24 or newer | configures the project (`cmake`) and runs the tests (`ctest`) |
+| C++17 compiler | MSVC, GCC, or Clang | builds `Tutorial`, `AddDemo`, and `MathFunctions` |
 
-Note that this example uses lower case commands in the CMakeLists.txt
-file. Upper, lower, and mixed case commands are supported by CMake. The
-source code for tutorial.cxx will compute the square root of a number
-and the first version of it is very simple, as follows:
+Check:
+
+```bash
+cmake --version
+```
+
+On Windows, if Visual Studio is already installed, add the **Desktop development with C++** workload from the Visual Studio Installer. It includes MSVC and CMake. Then open **Developer PowerShell for VS** (so `cmake` and the compiler are on `PATH`). If CMake was installed separately from [cmake.org](https://cmake.org/download/), a normal terminal is enough.
+
+On Linux:
+
+```bash
+# Fedora / RHEL
+sudo dnf install cmake gcc-c++
+
+# Debian / Ubuntu
+sudo apt install cmake g++
+```
+
+The default generator on Windows is Visual Studio. On Linux it is Makefiles, when Ninja is not installed. The presets do not force a generator.
+
+## Build
+
+Shared library, the default:
+
+```bash
+cmake --preset default
+cmake --build --preset default
+ctest --preset default
+```
+
+Static libraries only:
+
+```bash
+cmake --preset static
+cmake --build --preset static
+ctest --preset static
+```
+
+Without presets:
+
+```bash
+cmake -S . -B build -DBUILD_SHARED_LIBS=ON
+cmake --build build
+ctest --test-dir build
+```
+
+`Tutorial` computes a square root. `AddDemo` calls `mathfunctions::add` in the shared library (`AddDemo 4` prints `4 + 9 = 13`).
+
+## Step 1 - Executable and version
+
+The starting point is an executable that computes a square root. `cmake_minimum_required` sets the CMake version, `project` sets the name, version, and language, and `add_executable` compiles `tutorial.cxx`.
+
+```cmake
+cmake_minimum_required(VERSION 3.24)
+
+project(Tutorial
+  VERSION 1.0
+  DESCRIPTION "CMake tutorial fork with a working shared library"
+  LANGUAGES CXX
+)
+
+add_executable(Tutorial tutorial.cxx)
+target_compile_features(Tutorial PRIVATE cxx_std_17)
+```
+
+`project(... VERSION 1.0)` defines `Tutorial_VERSION_MAJOR` and `Tutorial_VERSION_MINOR`. Those values reach the source through a generated header. `TutorialConfig.h.in` lives in the source tree. CMake writes `TutorialConfig.h` into the build tree, replacing the `@...@` variables:
+
+```c
+#define Tutorial_VERSION_MAJOR @Tutorial_VERSION_MAJOR@
+#define Tutorial_VERSION_MINOR @Tutorial_VERSION_MINOR@
+```
+
+```cmake
+configure_file(
+  "${PROJECT_SOURCE_DIR}/TutorialConfig.h.in"
+  "${PROJECT_BINARY_DIR}/TutorialConfig.h"
+)
+
+target_include_directories(Tutorial PRIVATE "${PROJECT_BINARY_DIR}")
+```
+
+`tutorial.cxx` includes that header and, when the argument is missing, prints the version together with the usage line:
 
 ```cxx
-// A simple program that computes the square root of a number
-#include <iostream>
-#include <sstream>
-#include <string>
-int main (int argc, char *argv[])
+std::cout << argv[0] << " Version " << Tutorial_VERSION_MAJOR << "."
+          << Tutorial_VERSION_MINOR << std::endl;
+std::cout << "Usage: " << argv[0] << " number" << std::endl;
+```
+
+## Step 2 - The MathFunctions library
+
+The square root lives in `MathFunctions/`, built as its own target and linked by anything that needs it.
+
+```cmake
+add_library(MathFunctions MathFunctions.cxx)
+add_library(MathFunctions::MathFunctions ALIAS MathFunctions)
+
+target_compile_features(MathFunctions PUBLIC cxx_std_17)
+target_link_libraries(Tutorial PRIVATE MathFunctions::MathFunctions)
+```
+
+The `MathFunctions::MathFunctions` alias is the same name another project gets after `find_package`. In the source, the API is the `mathfunctions` namespace:
+
+```cxx
+namespace mathfunctions {
+MATHFUNCTIONS_EXPORT double sqrt(double x);
+MATHFUNCTIONS_EXPORT int add(int a, int b);
+}
+```
+
+`target_link_libraries(... PRIVATE ...)` applies to `Tutorial` and to `AddDemo`. `PUBLIC` on the C++ feature makes every consumer inherit the C++17 requirement. The library include paths use generator expressions, so the right path is selected for the build tree and for the install tree:
+
+```cmake
+target_include_directories(MathFunctions
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+```
+
+### Making our implementation optional
+
+`USE_MYMATH` chooses whether `mathfunctions::sqrt` calls `detail::mysqrt` or `std::sqrt`. The default is on. The option is stored in the CMake cache and can be changed from the command line or the GUI.
+
+```cmake
+option(USE_MYMATH "Use the tutorial sqrt implementation" ON)
+```
+
+The library stays in the build either way: `AddDemo` always needs `mathfunctions::add`. Only the body of `sqrt` changes, through a compile definition:
+
+```cmake
+target_compile_definitions(MathFunctions PRIVATE
+  "$<$<BOOL:${USE_MYMATH}>:USE_MYMATH>"
+)
+```
+
+```cxx
+double sqrt(double x)
 {
-    if (argc < 2)
-    {
-	    std::cout << "Usage: " << argv[0] << " number" << std::endl;
-	    return 1;
-    }
-
-    double inputValue = std::stod(argv[1]);
-    const double outputValue = sqrt(inputValue);
-
-    std::cout << "The square root of " << inputValue << " is " << outputValue << std::endl;
-    
-	return 0;
-    }
+#ifdef USE_MYMATH
+  return detail::mysqrt(x);
+#else
+  return std::sqrt(x);
+#endif
+}
 ```
 
-### Adding a Version Number and Configured Header File
+To turn it off: `cmake -S . -B build -DUSE_MYMATH=OFF`.
 
-The first feature we will add is to provide our executable and project
-with a version number. While you can do this exclusively in the source
-code, doing it in the CMakeLists.txt file provides more flexibility. To
-add a version number we modify the CMakeLists.txt file as follows:
+## Step 3 - Tests and installation
+
+`include(CTest)` defines the `BUILD_TESTING` option (on by default) and enables `ctest`. The tests live in the top-level `CMakeLists.txt`.
+
+`Runs` checks that `Tutorial 25` exits with code zero. `Usage` runs `Tutorial` with no arguments and accepts the failure when the output matches the usage line. `do_test` repeats the same pattern for known values:
 
 ```cmake
-    cmake_minimum_required(VERSION 3.8)
-    project(Tutorial)
-    # The version number.
-    set (Tutorial_VERSION_MAJOR 1)
-    set (Tutorial_VERSION_MINOR 0)
-     
-    # configure a header file to pass some of the CMake settings
-    # to the source code
-    configure_file (
-      "${PROJECT_SOURCE_DIR}/TutorialConfig.h.in"
-      "${PROJECT_BINARY_DIR}/TutorialConfig.h"
-      )
-    
-	# add the executable
-    add_executable(Tutorial tutorial.cxx)
+if(BUILD_TESTING)
+  add_test(NAME Runs COMMAND Tutorial 25)
 
-    # add the binary tree to the search path for include files
-    # so that we will find TutorialConfig.h
-    target_include_directories(Tutorial PUBLIC
-                               "${PROJECT_BINARY_DIR}"
-                               )
+  add_test(NAME Usage COMMAND Tutorial)
+  set_tests_properties(Usage
+    PROPERTIES PASS_REGULAR_EXPRESSION "Usage:.*number"
+  )
+
+  function(do_test target arg result)
+    add_test(NAME Comp${arg} COMMAND ${target} ${arg})
+    set_tests_properties(Comp${arg}
+      PROPERTIES PASS_REGULAR_EXPRESSION "${result}"
+    )
+  endfunction()
+
+  do_test(Tutorial 4 "4 is 2")
+  do_test(Tutorial 9 "9 is 3")
+  do_test(Tutorial 5 "5 is 2.236")
+  do_test(Tutorial 7 "7 is 2.645")
+  do_test(Tutorial 25 "25 is 5")
+  do_test(Tutorial -25 "-25 is 0")
+  do_test(Tutorial 0.0001 "0.0001 is 0.01")
+
+  add_test(NAME AddDemoRuns COMMAND AddDemo 4)
+  set_tests_properties(AddDemoRuns
+    PROPERTIES PASS_REGULAR_EXPRESSION "4 \\+ 9 = 13"
+  )
+endif()
 ```
 
-Since the configured file will be written into the binary tree we must
-add that directory to the list of paths to search for include files. We
-then create a TutorialConfig.h.in file in the source tree with the
-following contents:
+`AddDemoRuns` checks the addition in the shared library. In a regular expression `+` is escaped, because it is a quantifier.
+
+Installation uses the `GNUInstallDirs` paths (`bin`, `lib`, `include`), so the layout is the same on every platform:
 
 ```cmake
-    // the configured options and settings for Tutorial
-    #define Tutorial_VERSION_MAJOR @Tutorial_VERSION_MAJOR@
-    #define Tutorial_VERSION_MINOR @Tutorial_VERSION_MINOR@
+install(TARGETS Tutorial AddDemo
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
 ```
 
- 
-
-When CMake configures this header file the values for
-\@Tutorial\_VERSION\_MAJOR@ and \@Tutorial\_VERSION\_MINOR@ will be
-replaced by the values from the CMakeLists.txt file. Next we modify
-tutorial.cxx to include the configured header file and to make use of
-the version numbers. The resulting source code is listed below.
-
-```cxx
-    // A simple program that computes the square root of a number
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <math.h>
-    #include "TutorialConfig.h"
-     
-    int main (int argc, char *argv[])
-    {
-        if (argc < 2)
-        {
-            std::cout << argv[0] << " Version " << Tutorial_VERSION_MAJOR << "." << Tutorial_VERSION_MAJOR << std::endl;
-            std::cout << "Usage: " << argv[0] << " number" << std::endl;
-            return 1;
-        }
-
-        double inputValue = std::stod(argv[1]);
-        const double outputValue = sqrt(inputValue);
-
-        std::cout << "The square root of " << inputValue << " is " << outputValue << std::endl;
-
-        return 0;
-    }
+```bash
+cmake --install build --prefix /tmp/tutorial
 ```
 
-The main changes are the inclusion of the TutorialConfig.h header file
-and printing out a version number as part of the usage message.
+## Step 4 - log, exp, and the generated table
 
-Adding a Library (Step 2)
--------------------------
-
-Now we will add a library to our project. This library will contain our
-own implementation for computing the square root of a number. The
-executable can then use this library instead of the standard square root
-function provided by the compiler. For this tutorial we will put the
-library into a subdirectory called MathFunctions. It will have the
-following one line CMakeLists.txt file:
+`mysqrt` prefers `exp(log(x) * 0.5)` when the system provides both functions. `check_symbol_exists` checks that at configure time. On Unix the math functions live in `libm`, so that library goes into `CMAKE_REQUIRED_LIBRARIES` before the check.
 
 ```cmake
-    add_library(MathFunctions mysqrt.cxx)
+include(CheckSymbolExists)
+
+if(NOT WIN32)
+  set(CMAKE_REQUIRED_LIBRARIES m)
+endif()
+check_symbol_exists(log "math.h" HAVE_LOG)
+check_symbol_exists(exp "math.h" HAVE_EXP)
 ```
 
-The source file mysqrt.cxx has one function called mysqrt that provides
-similar functionality to the compiler's sqrt function. To make use of
-the new library we add an add\_subdirectory call in the top level
-CMakeLists.txt file so that the library will get built. We also add
-another include directory so that the MathFunctions/MathFunctions.h
-header file can be found for the function prototype. The last change is
-to add the new library to the executable. The last few lines of the top
-level CMakeLists.txt file now look like:
+The result becomes a private compile definition on `SqrtLibrary`, enabled only when the check succeeds:
 
 ```cmake
-    include_directories ("${PROJECT_SOURCE_DIR}/MathFunctions")
-    add_subdirectory (MathFunctions) 
-     
-    # add the executable
-    add_executable (Tutorial tutorial.cxx)
-    target_link_libraries (Tutorial MathFunctions)
+target_compile_definitions(SqrtLibrary PRIVATE
+  "$<$<BOOL:${HAVE_LOG}>:HAVE_LOG>"
+  "$<$<BOOL:${HAVE_EXP}>:HAVE_EXP>"
+)
 ```
 
-Now let us consider making the MathFunctions library optional. In this
-tutorial there really isn't any reason to do so, but with larger
-libraries or libraries that rely on third party code you might want to.
-The first step is to add an option to the top level CMakeLists.txt file.
+When `log` or `exp` is missing, `mysqrt` starts from a value read out of a table generated during the build. `MakeTable` is an executable that writes `Table.h`:
 
 ```cmake
-    # should we use our own math functions?
-    option (USE_MYMATH 
-            "Use tutorial provided math implementation" ON) 
+add_executable(MakeTable MakeTable.cxx)
+
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/Table.h
+  COMMAND MakeTable ${CMAKE_CURRENT_BINARY_DIR}/Table.h
+  DEPENDS MakeTable
+)
 ```
 
-This will show up in the CMake GUI with a default value of ON that the
-user can change as desired. This setting will be stored in the cache so
-that the user does not need to keep setting it each time they run CMake
-on this project. The next change is to make the build and linking of the
-MathFunctions library conditional. To do this we change the end of the
-top level CMakeLists.txt file to look like the following:
+Listing `Table.h` among the sources of `SqrtLibrary` tells CMake to produce that file before compiling `mysqrt.cxx`. The build directory is an include path because `Table.h` is not in the source tree:
 
 ```cmake
-    # add the MathFunctions library?
-    #
-    if (USE_MYMATH)
-      include_directories ("${PROJECT_SOURCE_DIR}/MathFunctions")
-      add_subdirectory (MathFunctions)
-      set (EXTRA_LIBS ${EXTRA_LIBS} MathFunctions)
-    endif (USE_MYMATH)
-     
-    # add the executable
-    add_executable (Tutorial tutorial.cxx)
-    target_link_libraries (Tutorial  ${EXTRA_LIBS})
+add_library(SqrtLibrary OBJECT
+  mysqrt.cxx
+  ${CMAKE_CURRENT_BINARY_DIR}/Table.h
+)
+target_include_directories(SqrtLibrary PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 ```
 
-This uses the setting of USE\_MYMATH to determine if the MathFunctions
-should be compiled and used. Note the use of a variable (EXTRA\_LIBS in
-this case) to collect up any optional libraries to later be linked into
-the executable. This is a common approach used to keep larger projects
-with many optional components clean. The corresponding changes to the
-source code are fairly straight forward and leave us with:
+This whole block, table included, exists only while `USE_MYMATH` is on.
 
-```cxx
-    // A simple program that computes the square root of a number
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <math.h>
-    #include "TutorialConfig.h"
-    #ifdef USE_MYMATH
-    #include "MathFunctions.h"
-    #endif
-     
-    int main (int argc, char *argv[])
-    {
-      if (argc < 2)
-        {
-        fprintf(stdout,"%s Version %d.%d\n", argv[0],
-                Tutorial_VERSION_MAJOR,
-                Tutorial_VERSION_MINOR);
-        fprintf(stdout,"Usage: %s number\n",argv[0]);
-        return 1;
-        }
-     
-      double inputValue = atof(argv[1]);
-     
-    #ifdef USE_MYMATH
-      double outputValue = mysqrt(inputValue);
-    #else
-      double outputValue = sqrt(inputValue);
-    #endif
-     
-      fprintf(stdout,"The square root of %g is %g\n",
-              inputValue, outputValue);
-      return 0;
-    }
-```
+## Step 5 - Shared library
 
-In the source code we make use of USE\_MYMATH as well. This is provided
-from CMake to the source code through the TutorialConfig.h.in configured
-file by adding the following line to it:
+`BUILD_SHARED_LIBS=ON` (the default, and the `default` preset) makes `add_library(MathFunctions ...)` with no explicit type produce a shared library: `libMathFunctions.so` or `MathFunctions.dll`. The `static` preset turns it off.
 
 ```cmake
-    #cmakedefine USE_MYMATH
+option(BUILD_SHARED_LIBS "Build MathFunctions as a shared library (.so / .dll)" ON)
+
+set_target_properties(MathFunctions PROPERTIES
+  VERSION ${PROJECT_VERSION}
+  SOVERSION ${PROJECT_VERSION_MAJOR}
+  CXX_VISIBILITY_PRESET hidden
+  VISIBILITY_INLINES_HIDDEN YES
+)
 ```
 
-Installing and Testing (Step 3)
--------------------------------
+`VERSION` is the full filename (`.so.1.0.0`). `SOVERSION` is the ABI compatibility suffix (`.so.1`), equal to the project's major version. On GCC and Clang, `CXX_VISIBILITY_PRESET hidden` hides every symbol that is not marked for export.
 
-For the next step we will add install rules and testing support to our
-project. The install rules are fairly straight forward. For the
-MathFunctions library we setup the library and the header file to be
-installed by adding the following two lines to MathFunctions'
-CMakeLists.txt file:
+`GenerateExportHeader` writes `mathfunctions_export.h` with the `MATHFUNCTIONS_EXPORT` macro. On a Windows DLL that macro is `__declspec(dllexport)` inside the library and `__declspec(dllimport)` for its consumers. On ELF, with hidden visibility, it is the default-visibility attribute. The only exported symbols are the ones in `MathFunctions.h`.
 
 ```cmake
-    install (TARGETS MathFunctions DESTINATION bin)
-    install (FILES MathFunctions.h DESTINATION include)
+include(GenerateExportHeader)
+
+generate_export_header(MathFunctions
+  BASE_NAME mathfunctions
+  EXPORT_FILE_NAME mathfunctions_export.h
+)
 ```
 
-For the application the following lines are added to the top level
-CMakeLists.txt file to install the executable and the configured header
-file:
+The public headers, including the generated one, are a file set. `install(... FILE_SET HEADERS ...)` copies them into `include/` together with the library:
 
 ```cmake
-    # add the install targets
-    install (TARGETS Tutorial DESTINATION bin)
-    install (FILES "${PROJECT_BINARY_DIR}/TutorialConfig.h"        
-             DESTINATION include)
+target_sources(MathFunctions PUBLIC
+  FILE_SET HEADERS
+  BASE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
+  FILES
+    MathFunctions.h
+    ${CMAKE_CURRENT_BINARY_DIR}/mathfunctions_export.h
+)
 ```
 
-That is all there is to it. At this point you should be able to build
-the tutorial, then type make install (or build the INSTALL target from
-an IDE) and it will install the appropriate header files, libraries, and
-executables. The CMake variable CMAKE\_INSTALL\_PREFIX is used to
-determine the root of where the files will be installed. Adding testing
-is also a fairly straight forward process. At the end of the top level
-CMakeLists.txt file we can add a number of basic tests to verify that
-the application is working correctly.
+### Object libraries
+
+`add` and `mysqrt` are object libraries. CMake compiles the `.cxx` files and passes the `.o` / `.obj` files into `MathFunctions`.
 
 ```cmake
-    include(CTest)
-
-    # does the application run
-    add_test (TutorialRuns Tutorial 25)
-    # does it sqrt of 25
-    add_test (TutorialComp25 Tutorial 25)
-    set_tests_properties (TutorialComp25 PROPERTIES PASS_REGULAR_EXPRESSION "25 is 5")
-    # does it handle negative numbers
-    add_test (TutorialNegative Tutorial -25)
-    set_tests_properties (TutorialNegative PROPERTIES PASS_REGULAR_EXPRESSION "-25 is 0")
-    # does it handle small numbers
-    add_test (TutorialSmall Tutorial 0.0001)
-    set_tests_properties (TutorialSmall PROPERTIES PASS_REGULAR_EXPRESSION "0.0001 is 0.01")
-    # does the usage message work?
-    add_test (TutorialUsage Tutorial)
-    set_tests_properties (TutorialUsage PROPERTIES PASS_REGULAR_EXPRESSION "Usage:.*number")
+add_library(AddLibrary OBJECT add.cxx)
+set_target_properties(AddLibrary PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(MathFunctions PRIVATE AddLibrary)
 ```
 
-After building one may run the "ctest" command line tool to run the
-tests. The first test simply verifies that the application runs, does
-not segfault or otherwise crash, and has a zero return value. This is
-the basic form of a CTest test. The next few tests all make use of the
-PASS\_REGULAR\_EXPRESSION test property to verify that the output of the
-test contains certain strings. In this case verifying that the computed
-square root is what it should be and that the usage message is printed
-when an incorrect number of arguments are provided. If you wanted to add
-a lot of tests to test different input values you might consider
-creating a macro like the following:
+`POSITION_INDEPENDENT_CODE` is set because those objects end up inside a `.so` or a `.dll`. `SqrtLibrary` has the same property. An `OBJECT` library is absorbed when `MathFunctions` is shared and when it is static.
+
+At build time the executable and the library land in the same directory (`CMAKE_RUNTIME_OUTPUT_DIRECTORY` and `CMAKE_LIBRARY_OUTPUT_DIRECTORY` both point at `PROJECT_BINARY_DIR`). The loader finds the DLL or the `.so` with no `PATH` changes.
+
+At install time the executable goes to `bin/` and the library goes to `lib/`. On Windows the DLL goes to `bin/`, next to the executable, through `RUNTIME DESTINATION`. On Linux and macOS the installed executable's `RPATH` points at the library directory:
 
 ```cmake
-    #define a macro to simplify adding tests, then use it
-    macro (do_test arg result)
-      add_test (TutorialComp${arg} Tutorial ${arg})
-      set_tests_properties (TutorialComp${arg}
-        PROPERTIES PASS_REGULAR_EXPRESSION ${result})
-    endmacro (do_test)
-     
-    # do a bunch of result based tests
-    do_test (25 "25 is 5")
-    do_test (-25 "-25 is 0")
+if(APPLE)
+  set(CMAKE_INSTALL_RPATH "@executable_path/../${CMAKE_INSTALL_LIBDIR}")
+elseif(UNIX)
+  set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+endif()
 ```
 
-For each invocation of do\_test, another test is added to the project
-with a name, input, and results based on the passed arguments.
+## Step 6 - A CMake package for other projects
 
-Adding System Introspection (Step 4)
-------------------------------------
-
-Next let us consider adding some code to our project that depends on
-features the target platform may not have. For this example we will add
-some code that depends on whether or not the target platform has the log
-and exp functions. Of course almost every platform has these functions
-but for this tutorial assume that they are less common. If the platform
-has log then we will use that to compute the square root in the mysqrt
-function. We first test for the availability of these functions using
-the CheckFunctionExists.cmake macro in the top level CMakeLists.txt file
-as follows:
+`install(EXPORT)` writes `MathFunctionsTargets.cmake`: the description of the installed targets, under the `MathFunctions::` namespace. `Config.cmake.in` includes it. `write_basic_package_version_file` adds `MathFunctionsConfigVersion.cmake`, with `SameMajorVersion` compatibility.
 
 ```cmake
-    # does this system provide the log and exp functions?
-    include (CheckFunctionExists)
-    check_function_exists (log HAVE_LOG)
-    check_function_exists (exp HAVE_EXP)
+install(EXPORT MathFunctionsTargets
+  FILE MathFunctionsTargets.cmake
+  NAMESPACE MathFunctions::
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MathFunctions
+)
+
+configure_package_config_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/Config.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/MathFunctionsConfig.cmake"
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/MathFunctions
+)
 ```
 
-Next we modify the TutorialConfig.h.in to define those values if CMake
-found them on the platform as follows:
+The files land in `lib/cmake/MathFunctions`. Another project uses them like this:
 
 ```cmake
-    // does the platform provide exp and log functions?
-    #cmakedefine HAVE_LOG
-    #cmakedefine HAVE_EXP
+find_package(MathFunctions 1.0 REQUIRED)
+target_link_libraries(Consumer PRIVATE MathFunctions::MathFunctions)
 ```
 
-It is important that the tests for log and exp are done before the
-configure\_file command for TutorialConfig.h. The configure\_file
-command immediately configures the file using the current settings in
-CMake. Finally in the mysqrt function we can provide an alternate
-implementation based on log and exp if they are available on the system
-using the following code:
+`export(EXPORT ...)` writes the same targets file into the build tree, for a consumer that points at the build tree without installing.
 
-```cxx
-    // if we have both log and exp then use them
-    #if defined (HAVE_LOG) && defined (HAVE_EXP)
-      result = exp(log(x)*0.5);
-    #else // otherwise use an iterative approach
-      . . .
-```
+## Step 7 - CPack
 
-Adding a Generated File and Generator (Step 5)
-----------------------------------------------
-
-In this section we will show how you can add a generated source file
-into the build process of an application. For this example we will
-create a table of precomputed square roots as part of the build process,
-and then compile that table into our application. To accomplish this we
-first need a program that will generate the table. In the MathFunctions
-subdirectory a new source file named MakeTable.cxx will do just that.
-
-```cxx
-    // A simple program that builds a sqrt table 
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <math.h>
-     
-    int main (int argc, char *argv[])
-    {
-      int i;
-      double result;
-     
-      // make sure we have enough arguments
-      if (argc < 2)
-        {
-        return 1;
-        }
-      
-      // open the output file
-      FILE *fout = fopen(argv[1],"w");
-      if (!fout)
-        {
-        return 1;
-        }
-      
-      // create a source file with a table of square roots
-      fprintf(fout,"double sqrtTable[] = {\n");
-      for (i = 0; i < 10; ++i)
-        {
-        result = sqrt(static_cast<double>(i));
-        fprintf(fout,"%g,\n",result);
-        }
-     
-      // close the table with a zero
-      fprintf(fout,"0};\n");
-      fclose(fout);
-      return 0;
-    }
-```
-
-Note that the table is produced as valid C++ code and that the name of
-the file to write the output to is passed in as an argument. The next
-step is to add the appropriate commands to MathFunctions' CMakeLists.txt
-file to build the MakeTable executable, and then run it as part of the
-build process. A few commands are needed to accomplish this, as shown
-below.
+CPack builds an installer from the `install` rules already written. `InstallRequiredSystemLibraries` adds the compiler runtimes the current platform needs. Version and license come from the project variables:
 
 ```cmake
-    # first we add the executable that generates the table
-    add_executable(MakeTable MakeTable.cxx)
-     
-    # add the command to generate the source code
-    add_custom_command (
-      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/Table.h
-      COMMAND MakeTable ${CMAKE_CURRENT_BINARY_DIR}/Table.h
-      DEPENDS MakeTable
-      )
-     
-    # add the binary tree directory to the search path for 
-    # include files
-    include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
-     
-    # add the main library
-    add_library(MathFunctions mysqrt.cxx ${CMAKE_CURRENT_BINARY_DIR}/Table.h  )
+include(InstallRequiredSystemLibraries)
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
+set(CPACK_PACKAGE_VERSION_MAJOR "${Tutorial_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${Tutorial_VERSION_MINOR}")
+include(CPack)
 ```
 
-First the executable for MakeTable is added as any other executable
-would be added. Then we add a custom command that specifies how to
-produce Table.h by running MakeTable. Next we have to let CMake know
-that mysqrt.cxx depends on the generated file Table.h. This is done by
-adding the generated Table.h to the list of sources for the library
-MathFunctions. We also have to add the current binary directory to the
-list of include directories so that Table.h can be found and included by
-mysqrt.cxx. When this project is built it will first build the MakeTable
-executable. It will then run MakeTable to produce Table.h. Finally, it
-will compile mysqrt.cxx which includes Table.h to produce the
-MathFunctions library. At this point the top level CMakeLists.txt file
-with all the features we have added looks like the following:
+After a build, from the build directory:
 
-```cmake
-    cmake_minimum_required (VERSION 2.6)
-    project (Tutorial)
-    include(CTest)
-     
-    # The version number.
-    set (Tutorial_VERSION_MAJOR 1)
-    set (Tutorial_VERSION_MINOR 0)
-     
-    # does this system provide the log and exp functions?
-    include (${CMAKE_ROOT}/Modules/CheckFunctionExists.cmake)
-     
-    check_function_exists (log HAVE_LOG)
-    check_function_exists (exp HAVE_EXP)
-     
-    # should we use our own math functions
-    option(USE_MYMATH 
-      "Use tutorial provided math implementation" ON)
-     
-    # configure a header file to pass some of the CMake settings
-    # to the source code
-    configure_file (
-      "${PROJECT_SOURCE_DIR}/TutorialConfig.h.in"
-      "${PROJECT_BINARY_DIR}/TutorialConfig.h"
-      )
-     
-    # add the binary tree to the search path for include files
-    # so that we will find TutorialConfig.h
-    include_directories ("${PROJECT_BINARY_DIR}")
-     
-    # add the MathFunctions library?
-    if (USE_MYMATH)
-      include_directories ("${PROJECT_SOURCE_DIR}/MathFunctions")
-      add_subdirectory (MathFunctions)
-      set (EXTRA_LIBS ${EXTRA_LIBS} MathFunctions)
-    endif (USE_MYMATH)
-     
-    # add the executable
-    add_executable (Tutorial tutorial.cxx)
-    target_link_libraries (Tutorial  ${EXTRA_LIBS})
-     
-    # add the install targets
-    install (TARGETS Tutorial DESTINATION bin)
-    install (FILES "${PROJECT_BINARY_DIR}/TutorialConfig.h"        
-             DESTINATION include)
-     
-    # does the application run
-    add_test (TutorialRuns Tutorial 25)
-     
-    # does the usage message work?
-    add_test (TutorialUsage Tutorial)
-    set_tests_properties (TutorialUsage
-      PROPERTIES 
-      PASS_REGULAR_EXPRESSION "Usage:.*number"
-      )
-     
-     
-    #define a macro to simplify adding tests
-    macro (do_test arg result)
-      add_test (TutorialComp${arg} Tutorial ${arg})
-      set_tests_properties (TutorialComp${arg}
-        PROPERTIES PASS_REGULAR_EXPRESSION ${result}
-        )
-    endmacro (do_test)
-     
-    # do a bunch of result based tests
-    do_test (4 "4 is 2")
-    do_test (9 "9 is 3")
-    do_test (5 "5 is 2.236")
-    do_test (7 "7 is 2.645")
-    do_test (25 "25 is 5")
-    do_test (-25 "-25 is 0")
-    do_test (0.0001 "0.0001 is 0.01")
+```bash
+cpack --config CPackConfig.cmake
+cpack --config CPackSourceConfig.cmake
 ```
 
-TutorialConfig.h.in looks like:
+The first creates the binary package. The second creates the source package.
 
-```cxx
-    // the configured options and settings for Tutorial
-    #define Tutorial_VERSION_MAJOR @Tutorial_VERSION_MAJOR@
-    #define Tutorial_VERSION_MINOR @Tutorial_VERSION_MINOR@
-    #cmakedefine USE_MYMATH
-     
-    // does the platform provide exp and log functions?
-    #cmakedefine HAVE_LOG
-    #cmakedefine HAVE_EXP
+## Presets
+
+`CMakePresets.json` fixes the two configurations used above, without choosing a generator. `default` turns `BUILD_SHARED_LIBS` on and writes to `build/`. `static` turns it off and writes to `build-static/`, so the two builds keep separate caches.
+
+```json
+{
+  "name": "default",
+  "binaryDir": "${sourceDir}/build",
+  "cacheVariables": {
+    "BUILD_SHARED_LIBS": "ON",
+    "USE_MYMATH": "ON"
+  }
+}
 ```
 
-And the CMakeLists.txt file for MathFunctions looks like:
-
-```cmake
-    # first we add the executable that generates the table
-    add_executable(MakeTable MakeTable.cxx)
-    # add the command to generate the source code
-    add_custom_command (
-      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/Table.h
-      DEPENDS MakeTable
-      COMMAND MakeTable ${CMAKE_CURRENT_BINARY_DIR}/Table.h
-      )
-    # add the binary tree directory to the search path 
-    # for include files
-    include_directories( ${CMAKE_CURRENT_BINARY_DIR} )
-     
-    # add the main library
-    add_library(MathFunctions mysqrt.cxx ${CMAKE_CURRENT_BINARY_DIR}/Table.h)
-     
-    install (TARGETS MathFunctions DESTINATION bin)
-    install (FILES MathFunctions.h DESTINATION include)
-```
-
-Building an Installer (Step 6)
-------------------------------
-
-Next suppose that we want to distribute our project to other people so
-that they can use it. We want to provide both binary and source
-distributions on a variety of platforms. This is a little different from
-the install we did previously in section Installing and Testing (Step
-3), where we were installing the binaries that we had built from the
-source code. In this example we will be building installation packages
-that support binary installations and package management features as
-found in cygwin, debian, RPMs etc. To accomplish this we will use CPack
-to create platform specific installers as described in Chapter Packaging
-with CPack. Specifically we need to add a few lines to the bottom of our
-toplevel CMakeLists.txt file.
-
-```cmake
-    # build a CPack driven installer package
-    include (InstallRequiredSystemLibraries)
-    set (CPACK_RESOURCE_FILE_LICENSE  
-         "${CMAKE_CURRENT_SOURCE_DIR}/License.txt")
-    set (CPACK_PACKAGE_VERSION_MAJOR "${Tutorial_VERSION_MAJOR}")
-    set (CPACK_PACKAGE_VERSION_MINOR "${Tutorial_VERSION_MINOR}")
-    include (CPack)
-```
-
-That is all there is to it. We start by including
-InstallRequiredSystemLibraries. This module will include any runtime
-libraries that are needed by the project for the current platform. Next
-we set some CPack variables to where we have stored the license and
-version information for this project. The version information makes use
-of the variables we set earlier in this tutorial. Finally we include the
-CPack module which will use these variables and some other properties of
-the system you are on to setup an installer.
-
-The next step is to build the project in the usual manner and then run
-CPack on it. To build a binary distribution you would run:
-
-```
-    cpack --config CPackConfig.cmake
-```
-
-To create a source distribution you would type
-
-```
-    cpack --config CPackSourceConfig.cmake
-```
-
-Adding Support for a Dashboard (Step 7)
----------------------------------------
-
-Adding support for submitting our test results to a dashboard is very
-easy. We already defined a number of tests for our project in the
-earlier steps of this tutorial. We just have to run those tests and
-submit them to a dashboard. To include support for dashboards we include
-the CTest module in our toplevel CMakeLists.txt file.
-
-```cmake
-    # enable dashboard scripting
-    include (CTest)
-```
-
-We also create a CTestConfig.cmake file where we can specify the name of
-this project for the dashboard.
-
-```cmake
-    set (CTEST_PROJECT_NAME "Tutorial")
-```
-
-CTest will read in this file when it runs. To create a simple dashboard
-you can run CMake on your project, change directory to the binary tree,
-and then run ctest --D Experimental. The results of your dashboard will
-be uploaded to Kitware's public dashboard
-[here](http://www.cdash.org/CDash/index.php?project=PublicDashboard).
+`cmake --preset`, `cmake --build --preset`, and `ctest --preset` all use the same name.

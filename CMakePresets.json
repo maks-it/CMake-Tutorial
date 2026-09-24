@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "default",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "ON",
+        "USE_MYMATH": "ON"
+      }
+    },
+    {
+      "name": "static",
+      "binaryDir": "${sourceDir}/build-static",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "OFF",
+        "USE_MYMATH": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "static", "configurePreset": "static" }
+  ],
+  "testPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "static", "configurePreset": "static" }
+  ]
+}
